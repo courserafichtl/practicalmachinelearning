@@ -1,0 +1,97 @@
+---
+title: "Practical Machine Learning Course Assignment"
+author: "jason fichtl"
+date: "30 April 2017"
+output: html_document
+---
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+library(caret)
+## downlaod training and testing datasets from specified website
+## training data
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv", mode='wb' )
+# cleanup data and load into datafrmae
+training <- read.csv("pml-training.csv", header = TRUE, na.strings=c("NA","NaN", " ", "", "#DIV/0!"))
+# 
+
+#testing data
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile="pml-testing.csv", mode='wb' )
+# cleanup data and load into datafrmae
+testing <- read.csv("pml-testingg.csv", header = TRUE, na.strings=c("NA","NaN", " ", "", "#DIV/0!"))
+
+
+# explore the training data
+view(training)
+summary(training)
+str(training)
+
+# the dataframe is very large = 160 columns with 4 character/factors and the rest numerical
+# lets get rid of rows where new_data="yes" as these are sumary rows
+training <- subset(training, new_window == "no")
+
+#lets remove NA values 
+training <- Filter(function(x)!all(is.na(x)), training)
+dim(training)
+
+#dataframe is still large - run nsv to find variates with nzv
+nsv <- nearZeroVar(training, saveMetrics=TRUE)
+#view nsv
+nsv
+#remove nsv columns
+nsv[nsv$nzv == TRUE, ]
+
+#therers also columns to remove which only record attributes relative to users and time 
+removecols_var <-  c("X", "user_name", "raw_timestamp_part_1","raw_timestamp_part_2", "cvtd_timestamp","new_window","num_window")
+  
+training <- training[,!(names(training) %in% removecols_var)]
+
+#dataframe is now tidy
+#highly correlated predictors may cause bias so should be removed
+hcp_var <- abs(cor(training[,-53]))
+diag(hcp_var) <- 0
+corr.columns <- which(hcp_var > 0.95, arr.ind=T)
+clean.training <- training[-unique(corr.columns[,1])]
+
+#going to keep two datasets as per the origin data i.e. training set and testing set
+
+#now create the model
+#this is a supervised classification problem - we have been provided with target lable (classe)
+# going to try normal tree and randon forset - why? generally good broad range algorithms and, more importantly, as a #student, they are easier to understand the path followed to arrive at a particualr classification
+#evaluate the model
+#  randomForest(formula = classe ~ ., data = training, prox = TRUE) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 7
+## 
+##         OOB estimate of  error rate: 0.48%
+## Confusion matrix:
+##      A    B    C    D    E class.error
+## A 4104    0    0    0    0 0.000000000
+## B   10 2773    6    0    0 0.005736823
+## C    0   14 2497    3    0 0.006762132
+## D    0    0   27 2332    2 0.012282931
+## E    0    0    2    5 2639 0.002645503
+
+#fit the model
+modFit<-train(classe ~ .,method="rf",data=training)
+#found this ran for excessive time - so, forums sugegsted applying parallelisation techniques
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv",
+number = 10,
+allowParallel = TRUE)
+
+modFit<-train(classe ~ .,method="rf",data=training,trControl=fitControl)
+
+#apply the model against testing dataset and use predictions for quiz
+predict(modFit,newdata=testing)
+
+
